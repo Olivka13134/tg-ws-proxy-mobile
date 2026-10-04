@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.tgwsproxy.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'io.github.tgwsproxy.app'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '2.0.0'
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../signing/tgwsproxy.jks')
+            storePassword 'tgwsproxy'
+            keyAlias 'tgwsproxy'
+            keyPassword 'tgwsproxy'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+}
+
+dependencies {
+    implementation files('libs/tgws.aar')
+}

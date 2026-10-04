@@ -1,0 +1,16 @@
+# build outputs
+/tg-ws-proxy
+*.exe
+*.syso.bak
+android/.gradle/
+android/build/
+android/app/build/
+android/app/libs/
+android/local.properties
+ios/Frameworks/*.xcframework
+ios/*.xcodeproj
+ios/build/
+ios/Payload/
+*.ipa
+# private: Android signing key (keep it only on your computer)
+android/signing/

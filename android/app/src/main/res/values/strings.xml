@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TG WS Proxy</string>
+    <string name="channel_name">Proxy status</string>
+    <string name="notif_title">TG WS Proxy is on</string>
+    <string name="starting">Starting…</string>
+    <string name="turn_off">Turn off</string>
+    <string name="no_telegram">Telegram is not installed</string>
+    <string name="init_error">Could not start the proxy core.</string>
+</resources>

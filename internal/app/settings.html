@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TG WS Proxy</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--fg:#17191c;--mute:#6b7280;--line:#e3e5e9;--acc:#2a7de1;--acc-fg:#fff;--ok:#1f9d55;--bad:#d64545;--field:#fbfbfc}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1b1e23;--fg:#e8eaed;--mute:#9aa1ab;--line:#2c3138;--acc:#4b97ef;--acc-fg:#0b1220;--ok:#3fbf7f;--bad:#ef6b6b;--field:#16191d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px 64px}
+header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+h1{font-size:20px;margin:0;font-weight:650}
+.pill{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mute)}
+.pill.ok{color:var(--ok);border-color:currentColor}.pill.bad{color:var(--bad);border-color:currentColor}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin:0 0 12px;font-weight:600}
+.link{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.link code{flex:1 1 320px;min-width:0;overflow-wrap:anywhere;background:var(--field);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.stat span{color:var(--mute);font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:12.5px;color:var(--mute);margin-bottom:4px}
+input[type=text],input[type=number],textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--fg);font:inherit}
+textarea{min-height:64px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.full{grid-column:1/-1}
+.check{display:flex;gap:8px;align-items:flex-start;color:var(--fg);font-size:14px;margin:0}
+.check input{margin-top:3px}
+.hint{color:var(--mute);font-size:12px;margin-top:4px}
+.row{display:flex;gap:8px}
+button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:8px 14px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);font-weight:600}
+button:disabled{opacity:.6;cursor:default}
+[hidden]{display:none!important}
+.power{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.power b{font-size:16px}
+button.big{padding:12px 22px;font-size:16px;min-width:130px}
+button.off{background:var(--card);color:var(--fg);border-color:var(--line)}
+.warn{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-size:13px}
+.bar{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 30%);padding:18px 0 4px;display:flex;gap:10px;align-items:center}
+#msg{font-size:13px}#msg.err{color:var(--bad)}#msg.ok{color:var(--ok)}
+details summary{cursor:pointer;color:var(--mute);font-size:13px;margin:4px 0 10px}
+</style>
+</head>
+<body>
+<main>
+<header><h1>TG WS Proxy</h1><span id="status" class="pill">…</span></header>
+
+<section class="card" id="power" hidden>
+  <div class="power">
+    <div><b id="power_title">Прокси выключен</b><div class="hint" id="power_hint" data-t="power_hint">Включите, затем нажмите «Подключить в Telegram».</div></div>
+    <button class="primary big" id="toggle">Включить</button>
+  </div>
+  <div class="warn" id="battery" hidden>
+    <span data-t="battery">Android может усыплять прокси в фоне. Разрешите работу без ограничений.</span>
+    <button id="battery_fix" data-t="battery_fix">Разрешить</button>
+  </div>
+  <div class="hint" id="ios_hint" hidden data-t="ios_hint">iPhone держит прокси в фоне через беззвучное аудио. Если прокси остановился (звонок, другое приложение с аудио), откройте это приложение снова.</div>
+</section>
+
+<section class="card">
+  <h2 data-t="link_h">Ссылка для Telegram</h2>
+  <div class="link"><code id="link">…</code>
+    <button class="primary" id="open" data-t="open">Подключить в Telegram</button>
+    <button id="copy" data-t="copy">Копировать</button></div>
+  <div class="hint" id="err"></div>
+</section>
+
+<section class="card">
+  <h2 data-t="stats_h">Статистика</h2>
+  <div class="stats">
+    <div class="stat"><b id="s_active">0</b><span data-t="s_active">активных</span></div>
+    <div class="stat"><b id="s_total">0</b><span data-t="s_total">всего</span></div>
+    <div class="stat"><b id="s_routes">–</b><span data-t="s_routes">WS / CF / TCP</span></div>
+    <div class="stat"><b id="s_pool">–</b><span data-t="s_pool">из пула</span></div>
+    <div class="stat"><b id="s_stalls">0</b><span data-t="s_stalls">зависаний поймано</span></div>
+    <div class="stat"><b id="s_traffic">–</b><span data-t="s_traffic">↑ / ↓</span></div>
+  </div>
+</section>
+
+<form id="f">
+<section class="card">
+  <h2 data-t="main_h">Основное</h2>
+  <div class="grid">
+    <div><label data-t="host">Адрес</label><input type="text" name="host"></div>
+    <div><label data-t="port">Порт</label><input type="number" name="port" min="1" max="65535"></div>
+    <div class="full"><label data-t="secret">Secret (32 hex)</label>
+      <div class="row"><input type="text" name="secret" spellcheck="false"><button type="button" id="gen" data-t="gen">Новый</button></div>
+      <div class="hint" data-t="secret_hint">После смены secret прокси нужно заново добавить в Telegram.</div></div>
+    <div class="full"><label data-t="dcip">DC → IP (по одному в строке)</label><textarea name="dc_ip" spellcheck="false"></textarea>
+      <div class="hint" data-t="dcip_hint">Если не грузятся фото/видео на аккаунте без Premium, оставьте только 4:149.154.167.220.</div></div>
+    <div class="full" id="autostart_row"><label class="check"><input type="checkbox" name="autostart"><span data-t="autostart" id="autostart_label">Запускать при входе в систему</span></label></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2 data-t="fb_h">Обходные пути</h2>
+  <div class="grid">
+    <div class="full"><label class="check"><input type="checkbox" name="cfproxy"><span data-t="cf">Cloudflare-прокси, если WebSocket недоступен</span></label></div>
+    <div class="full"><label class="check"><input type="checkbox" name="cfproxy_user_domain_enabled"><span data-t="cf_own">Свои CF-домены</span></label>
+      <textarea name="cfproxy_user_domain" spellcheck="false" placeholder="example.com"></textarea></div>
+    <div class="full"><label class="check"><input type="checkbox" name="cfproxy_worker_enabled"><span data-t="cfw">CF Worker</span></label>
+      <textarea name="cfproxy_worker_domain" spellcheck="false" placeholder="name.workers.dev"></textarea></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2 data-t="speed_h">Скорость</h2>
+  <div class="grid">
+    <div><label data-t="stall">Обрыв зависшего соединения, сек</label><input type="number" name="stall_timeout" min="0" step="0.5">
+      <div class="hint" data-t="stall_hint">Если Telegram не подтверждает данные столько секунд, соединение пересоздаётся. 0 — выкл.</div></div>
+    <div><label data-t="head">Фора прямому WS, мс</label><input type="number" name="fallback_head_ms" min="100" step="100">
+      <div class="hint" data-t="head_hint">Потом параллельно стартуют обходные пути, побеждает самый быстрый.</div></div>
+    <div><label data-t="pool">Пул соединений на DC</label><input type="number" name="pool_size" min="0" max="32"></div>
+    <div><label data-t="buf">Буфер сокета, КБ</label><input type="number" name="buf_kb" min="4"></div>
+  </div>
+</section>
+
+<section class="card">
+  <details><summary data-t="adv">Дополнительно</summary>
+  <div class="grid">
+    <div><label data-t="ftls">Fake TLS домен (ee-secret)</label><input type="text" name="fake_tls_domain" placeholder=""></div>
+    <div><label data-t="lang">Язык</label><select name="language"><option value="ru">Русский</option><option value="en">English</option></select></div>
+    <div class="full"><label class="check"><input type="checkbox" name="no_secure"><span data-t="nosec">Порт 80 для CF-прокси / Worker</span></label></div>
+    <div class="full"><label class="check"><input type="checkbox" name="force_test_dc"><span data-t="test">Тестовые DC Telegram</span></label></div>
+    <div class="full"><label class="check"><input type="checkbox" name="verbose"><span data-t="verbose">Подробный лог</span></label></div>
+  </div></details>
+</section>
+
+<div class="bar"><button class="primary" type="submit" id="save" data-t="save">Сохранить и перезапустить</button><span id="msg"></span></div>
+</form>
+</main>
+<script>
+const LANG = "{{LANG}}";
+const EN = {link_h:"Telegram link",open:"Connect in Telegram",copy:"Copy",copied:"Copied",stats_h:"Statistics",s_active:"active",s_total:"total",s_routes:"WS / CF / TCP",s_pool:"from pool",s_stalls:"stalls caught",s_traffic:"↑ / ↓",main_h:"Main",host:"Address",port:"Port",secret:"Secret (32 hex)",gen:"New",secret_hint:"After changing the secret, add the proxy to Telegram again.",dcip:"DC → IP (one per line)",dcip_hint:"If photos/videos don't load on a non-Premium account, keep only 4:149.154.167.220.",autostart:"Start at login",fb_h:"Fallbacks",cf:"Cloudflare proxy when WebSocket is unavailable",cf_own:"Own CF domains",cfw:"CF Worker",speed_h:"Speed",stall:"Drop a stalled connection after, s",stall_hint:"If Telegram doesn't acknowledge data for this long, the connection is recreated. 0 = off.",head:"Direct WS head start, ms",head_hint:"Then fallbacks start in parallel and the fastest wins.",pool:"Pool size per DC",buf:"Socket buffer, KB",adv:"Advanced",ftls:"Fake TLS domain (ee-secret)",lang:"Language",nosec:"Port 80 for CF proxy / Worker",test:"Telegram test DCs",verbose:"Verbose log",save:"Save and restart",saved:"Saved, proxy restarted",running:"running",stopped:"stopped",power_hint:"Turn it on, then press \"Connect in Telegram\".",battery:"Android may put the proxy to sleep in the background. Allow unrestricted battery use.",battery_fix:"Allow",ios_hint:"iPhone keeps the proxy alive in the background with silent audio. If it stopped (a call, another app playing audio), open this app again.",on:"Turn on",off:"Turn off",p_on:"Proxy is on",p_off:"Proxy is off",autostart_phone:"Start when the phone boots"};
+const RU = {copied:"Скопировано",saved:"Сохранено",running:"работает",stopped:"остановлен",on:"Включить",off:"Выключить",p_on:"Прокси включён",p_off:"Прокси выключен",autostart_phone:"Запускать при включении телефона"};
+
+// Bridge to the phone app (Android: addJavascriptInterface, iOS: WKScriptMessageHandler)
+const NATIVE = window.TgWsNative ? {
+  platform: "android",
+  open: l => TgWsNative.open(l),
+  copy: x => TgWsNative.copy(x),
+  setRunning: on => TgWsNative.setRunning(on),
+  batteryRestricted: () => TgWsNative.batteryRestricted(),
+  fixBattery: () => TgWsNative.fixBattery(),
+} : (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.tgws) ? {
+  platform: "ios",
+  open: l => webkit.messageHandlers.tgws.postMessage({cmd: "open", arg: l}),
+  copy: x => webkit.messageHandlers.tgws.postMessage({cmd: "copy", arg: x}),
+  setRunning: on => webkit.messageHandlers.tgws.postMessage({cmd: on ? "start" : "stop", arg: ""}),
+  batteryRestricted: () => false,
+  fixBattery: () => {},
+} : null;
+const t = k => (LANG==="ru" ? RU[k] : EN[k]) || null;
+if (LANG !== "ru") document.querySelectorAll("[data-t]").forEach(e => { const v = EN[e.dataset.t]; if (v) e.textContent = v; });
+
+const base = location.pathname;
+const f = document.getElementById("f");
+const $ = id => document.getElementById(id);
+const lists = ["dc_ip","cfproxy_user_domain","cfproxy_worker_domain"];
+let loaded = false;
+
+function fill(c, autostart){
+  for (const el of f.elements){
+    if (!el.name) continue;
+    let v = el.name==="autostart" ? autostart : c[el.name];
+    if (el.type==="checkbox") el.checked = !!v;
+    else if (lists.includes(el.name)) el.value = (v||[]).join("\n");
+    else el.value = v ?? "";
+  }
+}
+function collect(){
+  const c = {};
+  for (const el of f.elements){
+    if (!el.name) continue;
+    if (el.type==="checkbox") c[el.name] = el.checked;
+    else if (el.type==="number") c[el.name] = Number(el.value);
+    else if (lists.includes(el.name)) c[el.name] = el.value.split(/[\s,;]+/).filter(Boolean);
+    else c[el.name] = el.value.trim();
+  }
+  return c;
+}
+function render(s){
+  $("link").textContent = s.link || "—";
+  const st = $("status");
+  st.textContent = s.running ? t("running") : t("stopped");
+  st.className = "pill " + (s.running ? "ok" : "bad");
+  renderPower(s.running);
+  $("err").textContent = s.error || "";
+  const x = s.stats;
+  $("s_active").textContent = x.Active; $("s_total").textContent = x.Total;
+  $("s_routes").textContent = `${x.WS} / ${x.CF + x.CFW} / ${x.TCP}`;
+  $("s_pool").textContent = `${x.PoolHits} / ${x.PoolHits + x.PoolMisses}`;
+  $("s_stalls").textContent = x.Stalls;
+  $("s_traffic").textContent = x.Up ? `${x.Up} / ${x.Down}` : "–";
+  if (!loaded){ fill(s.config, s.autostart); loaded = true; }
+}
+async function poll(){
+  try { const r = await fetch(base+"api/state"); render(await r.json()); } catch(e){}
+}
+poll(); setInterval(poll, 2000);
+
+$("open").onclick = () => NATIVE ? NATIVE.open($("link").textContent) : fetch(base+"api/open", {method:"POST"});
+if (NATIVE) {
+  $("power").hidden = false;
+  if (NATIVE.platform === "ios") { $("autostart_row").hidden = true; $("ios_hint").hidden = false; }
+  else $("autostart_label").textContent = t("autostart_phone");
+  $("battery_fix").onclick = () => NATIVE.fixBattery();
+  $("toggle").onclick = () => { $("toggle").disabled = true; NATIVE.setRunning(!lastRunning); setTimeout(() => { $("toggle").disabled = false; poll(); }, 700); };
+}
+let lastRunning = false;
+function renderPower(running){
+  lastRunning = running;
+  if (!NATIVE) return;
+  $("power_title").textContent = running ? t("p_on") : t("p_off");
+  $("toggle").textContent = running ? t("off") : t("on");
+  $("toggle").className = "big " + (running ? "off" : "primary");
+  try { $("battery").hidden = !NATIVE.batteryRestricted(); } catch(e) {}
+}
+$("copy").onclick = async () => {
+  if (NATIVE) { NATIVE.copy($("link").textContent); $("copy").textContent = t("copied"); setTimeout(()=>$("copy").textContent = LANG==="ru"?"Копировать":EN.copy, 1500); return; }
+  try { await navigator.clipboard.writeText($("link").textContent); $("copy").textContent = t("copied"); setTimeout(()=>$("copy").textContent = LANG==="ru"?"Копировать":EN.copy, 1500);} catch(e){}
+};
+$("gen").onclick = async () => { const r = await fetch(base+"api/secret",{method:"POST"}); f.secret.value = (await r.json()).secret; };
+f.onsubmit = async ev => {
+  ev.preventDefault();
+  const m = $("msg"); m.className = ""; m.textContent = "…"; $("save").disabled = true;
+  try {
+    const r = await fetch(base+"api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(collect())});
+    const j = await r.json();
+    if (!r.ok) { m.className = "err"; m.textContent = j.error || r.statusText; }
+    else { m.className = "ok"; m.textContent = t("saved"); loaded = false; render(j); if (j.config.language !== LANG) location.reload(); }
+  } catch(e){ m.className = "err"; m.textContent = String(e); }
+  $("save").disabled = false;
+};
+</script>
+</body>
+</html>

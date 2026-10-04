@@ -1,0 +1,65 @@
+# XcodeGen spec: `xcodegen generate` creates TgWsProxy.xcodeproj
+# (build_ios.sh does it for you).
+name: TgWsProxy
+options:
+  bundleIdPrefix: io.github.tgwsproxy
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    # The team id makes the bundle id unique, so a free Apple ID works
+    # without "bundle identifier is not available" errors.
+    PRODUCT_BUNDLE_IDENTIFIER: "io.github.tgwsproxy.app.$(DEVELOPMENT_TEAM)"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_BITCODE: "NO"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  TgWsProxy:
+    type: application
+    platform: iOS
+    scheme: {}
+    sources:
+      - path: TgWsProxy
+    dependencies:
+      - framework: Frameworks/Tgws.xcframework
+        embed: false
+    settings:
+      base:
+        INFOPLIST_FILE: TgWsProxy/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        OTHER_LDFLAGS: "-lresolv"
+    info:
+      path: TgWsProxy/Info.plist
+      properties:
+        CFBundleIdentifier: "$(PRODUCT_BUNDLE_IDENTIFIER)"
+        CFBundleExecutable: "$(EXECUTABLE_NAME)"
+        CFBundleName: "$(PRODUCT_NAME)"
+        CFBundlePackageType: APPL
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: TG WS Proxy
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Keeps the app (and the proxy inside it) running while Telegram
+        # is in front: the app plays silent audio mixed with other sound.
+        UIBackgroundModes:
+          - audio
+        LSApplicationQueriesSchemes:
+          - tg
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        ITSAppUsesNonExemptEncryption: false

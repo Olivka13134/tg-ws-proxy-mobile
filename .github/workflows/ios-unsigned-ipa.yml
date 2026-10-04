@@ -1,0 +1,42 @@
+# Builds an UNSIGNED .ipa on GitHub's macOS servers (no Mac needed).
+# Run it from the Actions tab ("Run workflow"), download the artifact,
+# then install it with Sideloadly using your Apple ID (see INSTALL).
+name: iOS unsigned IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["ios/**", "mobile/**", "internal/**", "go.mod", "go.sum", ".github/workflows/ios-unsigned-ipa.yml"]
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Tools
+        run: |
+          brew install xcodegen
+          go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Go core -> Tgws.xcframework
+        run: gomobile bind -target=ios -iosversion=15.0 -ldflags="-s -w" -trimpath -o ios/Frameworks/Tgws.xcframework ./mobile/tgws
+      - name: Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild -project TgWsProxy.xcodeproj -scheme TgWsProxy -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            PRODUCT_BUNDLE_IDENTIFIER=io.github.tgwsproxy.app \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/TgWsProxy.app Payload/
+          zip -qry TgWsProxy-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TgWsProxy-unsigned-ipa
+          path: ios/TgWsProxy-unsigned.ipa
