@@ -10,6 +10,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,6 +28,19 @@ type Server struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	conns  sync.Map
+
+	lastActive atomic.Int64 // unix nano of the last client activity (LowPower pool sleep)
+}
+
+// touch marks client activity: the pool stays warm while Telegram uses the proxy.
+func (s *Server) touch() { s.lastActive.Store(time.Now().UnixNano()) }
+
+// idleFor is how long no client has used the proxy.
+func (s *Server) idleFor() time.Duration {
+	if s.Stats.ConnActive.Load() > 0 { // Telegram holds a session: it is in use
+		return 0
+	}
+	return time.Duration(time.Now().UnixNano() - s.lastActive.Load())
 }
 
 func NewServer(cfg Config) *Server {
@@ -46,6 +60,7 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.ln = ln
+	s.touch() // just started: warm up as before
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.pool = newWSPool(s, s.ctx)
 	s.cfwPool = &cfWorkerPool{srv: s, ctx: s.ctx, idle: map[int][]*pooledWS{}, busy: map[int]bool{}}
@@ -193,9 +208,10 @@ func (s *Server) logBanner() {
 }
 
 func (s *Server) handle(c net.Conn) {
+	s.touch()
 	s.Stats.ConnTotal.Add(1)
 	s.Stats.ConnActive.Add(1)
-	defer s.Stats.ConnActive.Add(-1)
+	defer func() { s.Stats.ConnActive.Add(-1); s.touch() }()
 	defer c.Close()
 	setSockOpts(c, s.cfg.BufferSize)
 	label := c.RemoteAddr().String()

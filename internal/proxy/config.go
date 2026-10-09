@@ -27,6 +27,12 @@ type Config struct {
 	// New knobs (not in the Python version)
 	StallTimeout time.Duration // 0 disables the dead-upstream watchdog
 	FallbackHead time.Duration // how long direct WS gets before fallbacks start in parallel
+
+	// LowPower is the phone/laptop mode: the warm pool is small, sleeps when
+	// Telegram has not used the proxy for a few minutes, and timers tick
+	// less often. Pre-warmed sockets are rotated every ~55 s, so a full pool
+	// alone costs ~1000 TLS handshakes an hour and keeps the radio awake.
+	LowPower bool
 }
 
 func DefaultConfig() Config {
