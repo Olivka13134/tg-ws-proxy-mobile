@@ -17,6 +17,12 @@ const (
 	poolJanitorEvery = 3 * time.Second
 	refillBackoffMin = 1 * time.Second
 	refillBackoffMax = 60 * time.Second
+
+	// LowPower mode
+	lowPowerPoolSize   = 2                // per DC, regular connections only
+	lowPowerJanitor    = 10 * time.Second // janitor tick
+	lowPowerSleepAfter = 3 * time.Minute  // no client activity -> pool sleeps (no rotation)
+	lowPowerMediaWarm  = 2 * time.Minute  // media sockets are kept only right after media use
 )
 
 type poolKey struct {
@@ -80,6 +86,8 @@ type wsPool struct {
 	failures  map[poolKey]int
 	retryAt   map[poolKey]time.Time
 	ctx       context.Context
+	mediaAt   atomic.Int64 // last time a media socket was requested (LowPower)
+	sleeping  atomic.Bool
 }
 
 func newWSPool(s *Server, ctx context.Context) *wsPool {
@@ -96,6 +104,29 @@ func newWSPool(s *Server, ctx context.Context) *wsPool {
 
 func (p *wsPool) size() int { return p.srv.cfg.PoolSize }
 
+// sizeFor is how many idle sockets to keep for a key right now.
+func (p *wsPool) sizeFor(k poolKey) int {
+	n := p.size()
+	if !p.srv.cfg.LowPower || n <= 0 {
+		return n
+	}
+	if p.asleep() {
+		return 0
+	}
+	if k.media {
+		if time.Since(time.Unix(0, p.mediaAt.Load())) > lowPowerMediaWarm {
+			return 0
+		}
+		return 1
+	}
+	return min(n, lowPowerPoolSize)
+}
+
+// asleep: LowPower and Telegram has not used the proxy for a while.
+func (p *wsPool) asleep() bool {
+	return p.srv.cfg.LowPower && p.srv.idleFor() > lowPowerSleepAfter
+}
+
 func (p *wsPool) remove(k poolKey, x *pooledWS) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -111,7 +142,7 @@ func (p *wsPool) remove(k poolKey, x *pooledWS) bool {
 
 func (p *wsPool) add(k poolKey, ws *WSConn) bool {
 	p.mu.Lock()
-	if len(p.idle[k]) >= p.size() || p.ctx.Err() != nil {
+	if len(p.idle[k]) >= p.sizeFor(k) || p.ctx.Err() != nil {
 		p.mu.Unlock()
 		return false
 	}
@@ -129,6 +160,9 @@ func (p *wsPool) add(k poolKey, ws *WSConn) bool {
 }
 
 func (p *wsPool) get(k poolKey) *WSConn {
+	if k.media {
+		p.mediaAt.Store(time.Now().UnixNano())
+	}
 	for {
 		p.mu.Lock()
 		l := p.idle[k]
@@ -152,16 +186,17 @@ func (p *wsPool) get(k poolKey) *WSConn {
 }
 
 func (p *wsPool) scheduleRefill(k poolKey) {
-	if p.size() <= 0 || p.ctx.Err() != nil {
+	size := p.sizeFor(k)
+	if size <= 0 || p.ctx.Err() != nil {
 		return
 	}
 	p.mu.Lock()
-	if p.refilling[k] || time.Now().Before(p.retryAt[k]) || len(p.idle[k]) >= p.size() {
+	if p.refilling[k] || time.Now().Before(p.retryAt[k]) || len(p.idle[k]) >= size {
 		p.mu.Unlock()
 		return
 	}
 	p.refilling[k] = true
-	need := p.size() - len(p.idle[k])
+	need := size - len(p.idle[k])
 	p.mu.Unlock()
 
 	go func() {
@@ -214,7 +249,11 @@ func (p *wsPool) scheduleRefill(k poolKey) {
 }
 
 func (p *wsPool) janitor() {
-	t := time.NewTicker(poolJanitorEvery)
+	every := poolJanitorEvery
+	if p.srv.cfg.LowPower {
+		every = lowPowerJanitor
+	}
+	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
 		select {
@@ -223,12 +262,24 @@ func (p *wsPool) janitor() {
 			return
 		case <-t.C:
 		}
+		if p.asleep() {
+			// Telegram is not using the proxy: drop warm sockets and stop
+			// rotating them, so the radio can sleep. The next client wakes it.
+			if !p.sleeping.Swap(true) {
+				Log.Infof("WS pool sleeping: no clients for %.0f min", lowPowerSleepAfter.Minutes())
+				p.closeAll()
+			}
+			continue
+		}
+		if p.sleeping.Swap(false) {
+			Log.Infof("WS pool awake")
+		}
 		var expired []*pooledWS
 		p.mu.Lock()
 		for k, l := range p.idle {
 			keep := l[:0]
 			for _, x := range l {
-				if time.Since(x.created) > poolMaxAge {
+				if time.Since(x.created) > poolMaxAge || len(keep) >= p.sizeFor(k) {
 					expired = append(expired, x)
 				} else {
 					keep = append(keep, x)

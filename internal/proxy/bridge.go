@@ -204,16 +204,26 @@ func (s *Server) bridge(cl *clientSide, up upstream, ctx *cryptoCtx, split *pack
 	if st := s.cfg.StallTimeout; st > 0 {
 		if probe := probeFor(up.Conn()); probe != nil {
 			go func() {
-				t := time.NewTicker(250 * time.Millisecond)
+				// Poll fast only while data is in flight; an idle session is
+				// checked rarely (fewer wake-ups on phones and laptops).
+				const busyEvery = 250 * time.Millisecond
+				idleEvery := 1 * time.Second
+				if s.cfg.LowPower {
+					idleEvery = 2 * time.Second
+				}
+				t := time.NewTimer(busyEvery)
 				defer t.Stop()
 				var lastAcked uint64
 				var stuckSince time.Time
+				next := busyEvery
 				for {
+					t.Reset(next)
 					select {
 					case <-finished:
 						return
 					case <-t.C:
 					}
+					next = busyEvery
 					unacked, acked, ok := probe()
 					if !ok {
 						Log.Debugf("[%s] stall guard unavailable on this socket", label)
@@ -225,6 +235,9 @@ func (s *Server) bridge(cl *clientSide, up upstream, ctx *cryptoCtx, split *pack
 					if !unacked || acked > lastAcked {
 						lastAcked = max(lastAcked, acked)
 						stuckSince = time.Time{}
+						if !unacked {
+							next = idleEvery
+						}
 						continue
 					}
 					if stuckSince.IsZero() {

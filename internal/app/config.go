@@ -41,6 +41,7 @@ type Config struct {
 	FallbackHeadMS           int      `json:"fallback_head_ms"`
 	Language                 string   `json:"language"`
 	Autostart                bool     `json:"autostart"`
+	LowPower                 bool     `json:"low_power"`
 }
 
 // domains accepts both a list and a single comma/space separated string
@@ -255,5 +256,7 @@ func (c Config) ProxyConfig() (proxy.Config, error) {
 	pc.FakeTLSDomain = strings.TrimSpace(c.FakeTLSDomain)
 	pc.StallTimeout = time.Duration(c.StallTimeout * float64(time.Second))
 	pc.FallbackHead = time.Duration(c.FallbackHeadMS) * time.Millisecond
+	// на телефонах всегда экономим батарею; на ПК — по флагу low_power в config.json
+	pc.LowPower = c.LowPower || MobileMode
 	return pc, nil
 }
